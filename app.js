@@ -1,5 +1,6 @@
 const express = require('express');
 const { db, bucket } = require('./database.js'); // Import Firestore and storage bucket from firebase.js
+const cors = require('cors')
 const app = express();
 const port = 3000;
 const {
@@ -16,9 +17,16 @@ const {
     getSiswaPromotedOnKelas,
     getAllHistorySiswaByNoIndukSiswa
   } = require('./controller/historysiswacontroller.js');
+const {
+  updateBiayaSekolah,
+  updatePaymentStatus,
+  getBiayaSekolahByBiayaSekolahId,
+  getBiayaSekolahByHistorySiswaId
+} = require('./controller/biayasekolahcontroller.js');
 const { editOrangtuaByNoInduk, deleteOrangtuaByNoInduk } = require('./controller/orangtuasiswacontroller.js');
 // Middleware to parse JSON bodies
 app.use(express.json());
+app.use(cors());
 
 
 // Routes for Siswa operations
@@ -36,6 +44,11 @@ app.post('/historysiswa', addHistorySiswa); // Add a history siswa record
 app.put('/historysiswa/:historysiswaid', updateHistorySiswa); // Update a history siswa record
 app.get('/historysiswa/promoted/:kelas', getSiswaPromotedOnKelas); // Get siswa promoted on a specific kelas
 app.get('/historysiswa/:noinduksiswa', getAllHistorySiswaByNoIndukSiswa); // Get all history siswa records by noinduksiswa
+// routes for biayasekolah operations
+app.put('/update-info-pembayaran/:historysiswaid/:biayasekolahid', updateBiayaSekolah);
+app.put('/verifikasi-pembayaran/:historysiswaid/:biayasekolahid', updatePaymentStatus);
+app.get('/cek-tagihan/:historysiswaid/:biayasekolahid',getBiayaSekolahByBiayaSekolahId);
+app.get('/cek-history-pembayaran/:historysiswaid',getBiayaSekolahByHistorySiswaId);
 
 // Basic route to test the connection
 app.get('/', (req, res) => {

@@ -1,62 +1,81 @@
 const { db } = require('../database');
+const { FieldValue } = require('firebase-admin').firestore;
 
 // Add a history siswa record
+// Add a history siswa record
 exports.addHistorySiswa = async (req, res) => {
-    try {
-      const {
-        noinduksiswa,
-        rataNilaiUTS,
-        rataNilaiUAS,
-        keterangan
-      } = req.body;
-  
-      // Fetch siswa data
-      const siswaDoc = await db.collection('siswa').doc(noinduksiswa).get();
-      if (!siswaDoc.exists) {
-        return res.status(404).send(`Siswa with noinduksiswa ${noinduksiswa} not found`);
-      }
-      const siswaData = siswaDoc.data();
-      const { tahunAjaranSekarang, kelas } = siswaData;
-  
-      // Fetch orangtua details data
-      const orangtuaDetailsDoc = await db.collection('siswa').doc(noinduksiswa).collection('orangtua').doc('details').get();
-      if (!orangtuaDetailsDoc.exists) {
-        return res.status(404).send(`Orangtua details not found for siswa with noinduksiswa ${noinduksiswa}`);
-      }
-      const orangtuaDetailsData = orangtuaDetailsDoc.data();
-      const totalpenghasilanorangtua = orangtuaDetailsData.penghasilanayah + orangtuaDetailsData.penghasilanibu;
-  
-      // Calculate totalbiaya
-      const totalbiaya = 0.35 * totalpenghasilanorangtua;
-  
-      // Construct historysiswaid
-      const historysiswaid = `${noinduksiswa}-${tahunAjaranSekarang}`;
-  
-      // Construct history siswa data
-      const historySiswaData = {
+  try {
+    const {
+      noinduksiswa,
+      rataNilaiUTS = 0,
+      rataNilaiUAS = 0,
+      keterangan = 'data terbuat'
+    } = req.body;
+
+    // Fetch siswa data
+    const siswaDoc = await db.collection('siswa').doc(noinduksiswa).get();
+    if (!siswaDoc.exists) {
+      return res.status(404).send(`Siswa with noinduksiswa ${noinduksiswa} not found`);
+    }
+    const siswaData = siswaDoc.data();
+    const { tahunAjaranSekarang, kelas } = siswaData;
+
+    // Construct historysiswaid
+    const historysiswaid = `${noinduksiswa}-${tahunAjaranSekarang}`;
+
+    // Construct history siswa data
+    const historySiswaData = {
+      historysiswaid,
+      noinduksiswa,
+      tahunAjaranSekarang,
+      kelas,
+      rataNilaiUTS,
+      rataNilaiUAS,
+      keterangan,
+      ispromoted: calculateIsPromoted(rataNilaiUTS, rataNilaiUAS),
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()
+    };
+
+    // Add history siswa record to Firestore
+    await db.collection('historysiswa').doc(historysiswaid).set(historySiswaData);
+
+    // Generate biayaSekolah records for the year
+    const currentMonth = new Date().getMonth(); // Get current month index
+    const batch = db.batch();
+    for (let i = 0; i < 12; i++) {
+      const monthIndex = (currentMonth + i) % 12 + 1; // Cycle through months, starting from current month
+      const biayaSekolahId = `tagihan${noinduksiswa}${tahunAjaranSekarang}-${monthIndex}`;
+      const biayaSekolahData = {
+        biayaSekolahId,
         historysiswaid,
         noinduksiswa,
         tahunAjaranSekarang,
         kelas,
-        totalpenghasilanorangtua,
-        totalbiaya,
-        rataNilaiUTS,
-        rataNilaiUAS,
-        keterangan,
-        ispromoted: calculateIsPromoted(rataNilaiUTS, rataNilaiUAS)
+        biayaSaranaSekolah: 0,
+        biayaBuku: 0,
+        biayaSeragam: 0,
+        biayaEkskul: 0,
+        biayaKegiatanLain: 0,
+        biayaStudyTour: 0,
+        biayaSPP: 0, // Default biayaSPP value
+        totalBiaya: 0, // Default totalBiaya value
+        isPaid: false,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp()
       };
-  
-      // Add history siswa record to Firestore
-      await db.collection('historysiswa').doc(historysiswaid).set(historySiswaData);
-  
-      res.status(200).send(`HistorySiswa record added with id: ${historysiswaid}`);
-    } catch (error) {
-      res.status(500).send('Error adding HistorySiswa record: ' + error.message);
+      const biayaSekolahRef = db.collection('historysiswa').doc(historysiswaid).collection('biayasekolah').doc(biayaSekolahId);
+      batch.set(biayaSekolahRef, biayaSekolahData);
     }
-  };
-  
-  
-  
+    await batch.commit();
+
+    res.status(200).send(`HistorySiswa record added with id: ${historysiswaid}`);
+  } catch (error) {
+    res.status(500).send('Error adding HistorySiswa record: ' + error.message);
+  }
+};
+
+
 
 // Function to calculate ispromoted
 function calculateIsPromoted(rataNilaiUTS, rataNilaiUAS) {
