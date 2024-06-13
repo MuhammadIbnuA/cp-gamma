@@ -45,7 +45,7 @@ exports.addHistorySiswa = async (req, res) => {
     const batch = db.batch();
     for (let i = 0; i < 12; i++) {
       const monthIndex = (currentMonth + i) % 12 + 1; // Cycle through months, starting from current month
-      const biayaSekolahId = `tagihan${noinduksiswa}${tahunAjaranSekarang}-${monthIndex}`;
+      const biayaSekolahId = `tagihan${noinduksiswa}-${tahunAjaranSekarang}-${monthIndex}`;
       const biayaSekolahData = {
         biayaSekolahId,
         historysiswaid,

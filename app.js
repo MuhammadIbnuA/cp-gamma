@@ -2,7 +2,7 @@ const express = require('express');
 const { db, bucket } = require('./database.js'); // Import Firestore and storage bucket from firebase.js
 const cors = require('cors')
 const app = express();
-const port = 3000;
+const port = 3002;
 const {
     createSiswa,
     editSiswaByNoInduk,
@@ -24,6 +24,9 @@ const {
   getBiayaSekolahByHistorySiswaId
 } = require('./controller/biayasekolahcontroller.js');
 const { editOrangtuaByNoInduk, deleteOrangtuaByNoInduk } = require('./controller/orangtuasiswacontroller.js');
+const { generateSingleTagihan, generateMultipleTagihan } = require('./controller/tagihanbayarcontroller.js');
+const paymentHistoryController = require('./controller/paymenthistory.js');
+
 // Middleware to parse JSON bodies
 app.use(express.json());
 app.use(cors());
@@ -49,6 +52,16 @@ app.put('/update-info-pembayaran/:historysiswaid/:biayasekolahid', updateBiayaSe
 app.put('/verifikasi-pembayaran/:historysiswaid/:biayasekolahid', updatePaymentStatus);
 app.get('/cek-tagihan/:historysiswaid/:biayasekolahid',getBiayaSekolahByBiayaSekolahId);
 app.get('/cek-history-pembayaran/:historysiswaid',getBiayaSekolahByHistorySiswaId);
+// routes for tagihanbayar operations
+app.post('/generateSingleTagihan/:biayasekolahid', generateSingleTagihan);
+app.post('/generateMultipleTagihan', generateMultipleTagihan);
+// payment history
+app.post('/generate-payment/:biayasekolahid', paymentHistoryController.uploadBuktiFoto, paymentHistoryController.generatePaymentHistory);
+// app.patch('/approve-payment/:paymentid', paymentHistoryController.approvePayment);
+// app.patch('/reject-payment/:paymentid', paymentHistoryController.rejectPayment);
+
+
+
 
 // Basic route to test the connection
 app.get('/', (req, res) => {
