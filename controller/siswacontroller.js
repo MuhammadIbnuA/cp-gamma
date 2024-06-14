@@ -1,5 +1,8 @@
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 const { db } = require('../database');
 const { v4: uuidv4 } = require('uuid');
+const secretKey = 'iwishiwasyourjoke'; // Move this to your config file or environment variable
 
 // Function to get the next noinduksiswa
 const getNextNoIndukSiswa = async () => {
@@ -41,6 +44,7 @@ exports.createSiswa = async (req, res) => {
       kota,
       kodepos,
       notelepon,
+      email,
       namaayah,
       pekerjaanayah,
       pendidikanayah,
@@ -50,15 +54,17 @@ exports.createSiswa = async (req, res) => {
       pendidikanibu,
       penghasilanibu,
       namawali,
-      noteleponwali
+      noteleponwali,
+      emailOrtu
     } = req.body;
 
     // Validate required fields
     if (!nama_siswa || !tempat_lahir || !tanggal_lahir || !agama || !alamat || !kelurahan || !kecamatan || !kota || !kodepos || !notelepon ||
-        !namaayah || !pekerjaanayah || !pendidikanayah || !penghasilanayah || !namaibu || !pekerjaanibu || !pendidikanibu || !penghasilanibu) {
+        !namaayah || !pekerjaanayah || !pendidikanayah || !penghasilanayah || !namaibu || !pekerjaanibu || !pendidikanibu || !penghasilanibu || !email) {
       return res.status(400).send('Missing required fields');
     }
 
+    const hashedPassword = await bcrypt.hash(noinduksiswa.toString(), 10);
     const siswa = {
       noinduksiswa,
       noregsiswa,
@@ -75,7 +81,12 @@ exports.createSiswa = async (req, res) => {
       kecamatan,
       kota,
       kodepos,
-      notelepon
+      notelepon,
+      email,
+      password: hashedPassword,
+      isAdmin: false,
+      isSiswa: true,
+      isParent: false
     };
 
     await db.collection('siswa').doc(noinduksiswa.toString()).set(siswa);
@@ -91,7 +102,13 @@ exports.createSiswa = async (req, res) => {
       penghasilanibu,
       namawali,
       noteleponwali,
-      totalpenghasilan: parseInt(penghasilanayah) + parseInt(penghasilanibu)
+      emailOrtu,
+      username: `${noinduksiswa}ortu`,
+      password: hashedPassword, // Same hashed password as siswa
+      totalpenghasilan: parseInt(penghasilanayah) + parseInt(penghasilanibu),
+      isAdmin: false,
+      isParent: true,
+      isSiswa: false
     };
 
     await db.collection('siswa').doc(noinduksiswa.toString()).collection('orangtua').doc('details').set(orangtua);
@@ -102,59 +119,10 @@ exports.createSiswa = async (req, res) => {
   }
 };
 
-// Promote selected Siswa to the next grade
-exports.promoteSelectedSiswa = async (req, res) => {
-    try {
-      const { noinduksiswaList } = req.body;
-  
-      if (!Array.isArray(noinduksiswaList) || noinduksiswaList.length === 0) {
-        return res.status(400).send('Invalid request: noinduksiswaList must be a non-empty array');
-      }
-  
-      const batch = db.batch();
-  
-      const promises = noinduksiswaList.map(async (noinduksiswa) => {
-        const docRef = db.collection('siswa').doc(noinduksiswa.toString());
-        const doc = await docRef.get();
-  
-        if (!doc.exists) {
-          return res.status(404).send(`Siswa with noinduksiswa ${noinduksiswa} not found`);
-        }
-  
-        const data = doc.data();
-        const newKelas = data.kelas + 1;
-        const currentYear = parseInt(data.tahunAjaranSekarang.split('-')[0], 10);
-        const newTahunAjaranSekarang = `${currentYear + 1}-${currentYear + 2}`;
-  
-        batch.update(docRef, {
-          kelas: newKelas,
-          tahunAjaranSekarang: newTahunAjaranSekarang
-        });
-      });
-  
-      await Promise.all(promises);
-      await batch.commit();
-      res.status(200).send('Selected siswa promoted to the next grade');
-    } catch (error) {
-      res.status(500).send('Error promoting selected siswa: ' + error.message);
-    }
-  };
-// Other functions (edit, delete, filter, search) remain unchanged
-
-  
-  // Other functions (edit, delete, filter, search) remain unchanged
-  
-
-// Edit Siswa by noinduksiswa
-exports.editSiswaByNoInduk = async (req, res) => {
+// Login Siswa
+exports.loginSiswa = async (req, res) => {
   try {
-    const noinduksiswa = parseInt(req.params.noinduksiswa, 10);
-
-    if (isNaN(noinduksiswa)) {
-      return res.status(400).send('Invalid noinduksiswa');
-    }
-
-    const data = req.body;
+    const { noinduksiswa, password } = req.body;
 
     const doc = await db.collection('siswa').doc(noinduksiswa.toString()).get();
 
@@ -162,70 +130,318 @@ exports.editSiswaByNoInduk = async (req, res) => {
       return res.status(404).send('No siswa found with the given noinduksiswa');
     }
 
-    await db.collection('siswa').doc(noinduksiswa.toString()).update(data);
-    res.status(200).send(`Siswa with noinduksiswa: ${noinduksiswa} updated successfully`);
+    const siswa = doc.data();
+
+    const isPasswordValid = await bcrypt.compare(password, siswa.password);
+
+    if (!isPasswordValid) {
+      return res.status(401).send('Invalid password');
+    }
+
+    const token = generateToken({ noinduksiswa: siswa.noinduksiswa, nama_siswa: siswa.nama_siswa, isAdmin: siswa.isAdmin, isSiswa: siswa.isSiswa, isParent: siswa.isParent });
+    res.cookie('token', token, { httpOnly: true });
+
+    res.status(200).json({ token });
   } catch (error) {
-    res.status(500).send('Error updating siswa: ' + error.message);
+    res.status(500).send('Error logging in: ' + error.message);
+  }
+};
+
+// Login Orangtua
+exports.loginOrangTua = async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).send('Username and password are required');
+    }
+
+    const noinduksiswa = username.split('ortu')[0]; // Extract noinduksiswa
+
+    const docRef = db
+      .collection('siswa')
+      .doc(noinduksiswa)
+      .collection('orangtua')
+      .doc('details');
+
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).send('No orangtua found with the given username');
+    }
+
+    const orangtua = doc.data();
+
+    const isPasswordValid = await bcrypt.compare(password, orangtua.password);
+
+    if (!isPasswordValid) {
+      return res.status(401).send('Invalid password');
+    }
+
+    const token = generateToken({
+      noinduksiswa,
+      nama_siswa: orangtua.nama_siswa, // Assuming you have nama_siswa in orangtua
+      isAdmin: orangtua.isAdmin,
+      isParent: orangtua.isParent,
+      isSiswa: orangtua.isSiswa,
+    });
+
+    res.cookie('token', token, { httpOnly: true });
+    res.status(200).json({ token });
+  } catch (error) {
+    console.error('Error logging in:', error);
+    res.status(500).send('Error logging in'); 
+  }
+};
+
+
+const generateToken = (payload) => {
+  return jwt.sign(payload, secretKey, { expiresIn: '1h' });
+};
+
+// Promote selected Siswa to the next grade
+exports.promoteSelectedSiswa = async (req, res) => {
+  try {
+      const { noinduksiswaList } = req.body;
+  
+      if (!Array.isArray(noinduksiswaList) || noinduksiswaList.length === 0) {
+          return res.status(400).send('Invalid request: noinduksiswaList must be a non-empty array');
+      }
+  
+      const batch = db.batch();
+  
+      const promises = noinduksiswaList.map(async (noinduksiswa) => {
+          const docRef = db.collection('siswa').doc(noinduksiswa.toString());
+          const doc = await docRef.get();
+  
+          if (!doc.exists) {
+              return res.status(404).send(`Siswa with noinduksiswa ${noinduksiswa} not found`);
+          }
+  
+          const data = doc.data();
+          const newKelas = data.kelas + 1;
+          const currentYear = parseInt(data.tahunAjaranSekarang.split('-')[0], 10);
+          const newTahunAjaranSekarang = `${currentYear + 1}-${currentYear + 2}`;
+  
+          batch.update(docRef, {
+              kelas: newKelas,
+              tahunAjaranSekarang: newTahunAjaranSekarang
+          });
+      });
+  
+      await Promise.all(promises);
+      await batch.commit();
+      res.status(200).send('Selected siswa promoted to the next grade');
+  } catch (error) {
+      res.status(500).send('Error promoting selected siswa: ' + error.message);
+  }
+};
+
+// Edit Siswa by noinduksiswa
+exports.editSiswaByNoInduk = async (req, res) => {
+  try {
+      const noinduksiswa = parseInt(req.params.noinduksiswa, 10);
+
+      if (isNaN(noinduksiswa)) {
+          return res.status(400).send('Invalid noinduksiswa');
+      }
+
+      const data = req.body;
+
+      const doc = await db.collection('siswa').doc(noinduksiswa.toString()).get();
+
+      if (!doc.exists) {
+          return res.status(404).send('No siswa found with the given noinduksiswa');
+      }
+
+      await db.collection('siswa').doc(noinduksiswa.toString()).update(data);
+      res.status(200).send(`Siswa with noinduksiswa: ${noinduksiswa} updated successfully`);
+  } catch (error) {
+      res.status(500).send('Error updating siswa: ' + error.message);
   }
 };
 
 // Delete Siswa by noinduksiswa
 exports.deleteSiswaByNoInduk = async (req, res) => {
   try {
-    const noinduksiswa = parseInt(req.params.noinduksiswa, 10);
+      const noinduksiswa = parseInt(req.params.noinduksiswa, 10);
 
-    if (isNaN(noinduksiswa)) {
-      return res.status(400).send('Invalid noinduksiswa');
-    }
+      if (isNaN(noinduksiswa)) {
+          return res.status(400).send('Invalid noinduksiswa');
+      }
 
-    const doc = await db.collection('siswa').doc(noinduksiswa.toString()).get();
+      const doc = await db.collection('siswa').doc(noinduksiswa.toString()).get();
 
-    if (!doc.exists) {
-      return res.status(404).send('No siswa found with the given noinduksiswa');
-    }
+      if (!doc.exists) {
+          return res.status(404).send('No siswa found with the given noinduksiswa');
+      }
 
-    await db.collection('siswa').doc(noinduksiswa.toString()).delete();
-    res.status(200).send(`Siswa with noinduksiswa: ${noinduksiswa} deleted successfully`);
+      await db.collection('siswa').doc(noinduksiswa.toString()).delete();
+      res.status(200).send(`Siswa with noinduksiswa: ${noinduksiswa} deleted successfully`);
   } catch (error) {
-    res.status(500).send('Error deleting siswa: ' + error.message);
+      res.status(500).send('Error deleting siswa: ' + error.message);
   }
 };
 
 // Filter Siswa
 exports.filterSiswa = async (req, res) => {
   try {
-    const filters = req.query; // Use query parameters for filtering
-    let query = db.collection('siswa');
+      const filters = req.query; // Use query parameters for filtering
+      let query = db.collection('siswa');
 
-    Object.keys(filters).forEach(key => {
-      query = query.where(key, '==', filters[key]);
-    });
+      Object.keys(filters).forEach(key => {
+          query = query.where(key, '==', filters[key]);
+      });
 
-    const snapshot = await query.get();
-    const documents = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    res.status(200).json(documents);
+      const snapshot = await query.get();
+      const documents = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      res.status(200).json(documents);
   } catch (error) {
-    res.status(500).send('Error filtering siswa: ' + error.message);
+      res.status(500).send('Error filtering siswa: ' + error.message);
   }
 };
 
 // Search Siswa by noinduksiswa
 exports.searchByNoIndukSiswa = async (req, res) => {
   try {
-    const noinduksiswa = parseInt(req.params.noinduksiswa, 10);
+      const noinduksiswa = parseInt(req.params.noinduksiswa, 10);
 
-    if (isNaN(noinduksiswa)) {
-      return res.status(400).send('Invalid noinduksiswa');
-    }
+      if (isNaN(noinduksiswa)) {
+          return res.status(400).send('Invalid noinduksiswa');
+      }
 
-    const doc = await db.collection('siswa').doc(noinduksiswa.toString()).get();
+      const doc = await db.collection('siswa').doc(noinduksiswa.toString()).get();
 
-    if (!doc.exists) {
-      return res.status(404).send('No siswa found with the given noinduksiswa');
-    }
+      if (!doc.exists) {
+          return res.status(404).send('No siswa found with the given noinduksiswa');
+      }
 
-    res.status(200).json({ id: doc.id, ...doc.data() });
+      res.status(200).json({ id: doc.id, ...doc.data() });
   } catch (error) {
-    res.status(500).send('Error searching siswa: ' + error.message);
+      res.status (500).send('Error searching siswa: ' + error.message);
   }
 };
+
+
+// // Promote selected Siswa to the next grade
+// exports.promoteSelectedSiswa = async (req, res) => {
+//     try {
+//       const { noinduksiswaList } = req.body;
+  
+//       if (!Array.isArray(noinduksiswaList) || noinduksiswaList.length === 0) {
+//         return res.status(400).send('Invalid request: noinduksiswaList must be a non-empty array');
+//       }
+  
+//       const batch = db.batch();
+  
+//       const promises = noinduksiswaList.map(async (noinduksiswa) => {
+//         const docRef = db.collection('siswa').doc(noinduksiswa.toString());
+//         const doc = await docRef.get();
+  
+//         if (!doc.exists) {
+//           return res.status(404).send(`Siswa with noinduksiswa ${noinduksiswa} not found`);
+//         }
+  
+//         const data = doc.data();
+//         const newKelas = data.kelas + 1;
+//         const currentYear = parseInt(data.tahunAjaranSekarang.split('-')[0], 10);
+//         const newTahunAjaranSekarang = `${currentYear + 1}-${currentYear + 2}`;
+  
+//         batch.update(docRef, {
+//           kelas: newKelas,
+//           tahunAjaranSekarang: newTahunAjaranSekarang
+//         });
+//       });
+  
+//       await Promise.all(promises);
+//       await batch.commit();
+//       res.status(200).send('Selected siswa promoted to the next grade');
+//     } catch (error) {
+//       res.status(500).send('Error promoting selected siswa: ' + error.message);
+//     }
+//   };
+
+// // Edit Siswa by noinduksiswa
+// exports.editSiswaByNoInduk = async (req, res) => {
+//   try {
+//     const noinduksiswa = parseInt(req.params.noinduksiswa, 10);
+
+//     if (isNaN(noinduksiswa)) {
+//       return res.status(400).send('Invalid noinduksiswa');
+//     }
+
+//     const data = req.body;
+
+//     const doc = await db.collection('siswa').doc(noinduksiswa.toString()).get();
+
+//     if (!doc.exists) {
+//       return res.status(404).send('No siswa found with the given noinduksiswa');
+//     }
+
+//     await db.collection('siswa').doc(noinduksiswa.toString()).update(data);
+//     res.status(200).send(`Siswa with noinduksiswa: ${noinduksiswa} updated successfully`);
+//   } catch (error) {
+//     res.status(500).send('Error updating siswa: ' + error.message);
+//   }
+// };
+
+// // Delete Siswa by noinduksiswa
+// exports.deleteSiswaByNoInduk = async (req, res) => {
+//   try {
+//     const noinduksiswa = parseInt(req.params.noinduksiswa, 10);
+
+//     if (isNaN(noinduksiswa)) {
+//       return res.status(400).send('Invalid noinduksiswa');
+//     }
+
+//     const doc = await db.collection('siswa').doc(noinduksiswa.toString()).get();
+
+//     if (!doc.exists) {
+//       return res.status(404).send('No siswa found with the given noinduksiswa');
+//     }
+
+//     await db.collection('siswa').doc(noinduksiswa.toString()).delete();
+//     res.status(200).send(`Siswa with noinduksiswa: ${noinduksiswa} deleted successfully`);
+//   } catch (error) {
+//     res.status(500).send('Error deleting siswa: ' + error.message);
+//   }
+// };
+
+// // Filter Siswa
+// exports.filterSiswa = async (req, res) => {
+//   try {
+//     const filters = req.query; // Use query parameters for filtering
+//     let query = db.collection('siswa');
+
+//     Object.keys(filters).forEach(key => {
+//       query = query.where(key, '==', filters[key]);
+//     });
+
+//     const snapshot = await query.get();
+//     const documents = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+//     res.status(200).json(documents);
+//   } catch (error) {
+//     res.status(500).send('Error filtering siswa: ' + error.message);
+//   }
+// };
+
+// // Search Siswa by noinduksiswa
+// exports.searchByNoIndukSiswa = async (req, res) => {
+//   try {
+//     const noinduksiswa = parseInt(req.params.noinduksiswa, 10);
+
+//     if (isNaN(noinduksiswa)) {
+//       return res.status(400).send('Invalid noinduksiswa');
+//     }
+
+//     const doc = await db.collection('siswa').doc(noinduksiswa.toString()).get();
+
+//     if (!doc.exists) {
+//       return res.status(404).send('No siswa found with the given noinduksiswa');
+//     }
+
+//     res.status(200).json({ id: doc.id, ...doc.data() });
+//   } catch (error) {
+//     res.status(500).send('Error searching siswa: ' + error.message);
+//   }
+// };

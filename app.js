@@ -1,6 +1,7 @@
 const express = require('express');
 const { db, bucket } = require('./database.js'); // Import Firestore and storage bucket from firebase.js
-const cors = require('cors')
+const cors = require('cors');
+const cookieParser = require('cookie-parser');
 const app = express();
 const port = 3002;
 const {
@@ -9,7 +10,9 @@ const {
     deleteSiswaByNoInduk,
     filterSiswa,
     searchByNoIndukSiswa,
-    promoteSelectedSiswa
+    promoteSelectedSiswa,
+    loginSiswa,
+    loginOrangTua
   } = require('./controller/siswacontroller.js');
 const {
     addHistorySiswa,
@@ -26,19 +29,24 @@ const {
 const { editOrangtuaByNoInduk, deleteOrangtuaByNoInduk } = require('./controller/orangtuasiswacontroller.js');
 const { generateSingleTagihan, generateMultipleTagihan } = require('./controller/tagihanbayarcontroller.js');
 const paymentHistoryController = require('./controller/paymenthistory.js');
-
+const { isAdmin, isSiswa, isParent, authenticateJWT } = require('./controller/middleware/auth.js');
 // Middleware to parse JSON bodies
 app.use(express.json());
+app.use(cookieParser());
 app.use(cors());
 
 
-// Routes for Siswa operations
-app.post('/siswa', createSiswa);
-app.put('/siswa/:noinduksiswa', editSiswaByNoInduk);
-app.delete('/siswa/:noinduksiswa', deleteSiswaByNoInduk);
-app.get('/siswa', filterSiswa); // Use query parameters for filtering
-app.get('/siswa/search/:noinduksiswa', searchByNoIndukSiswa); // Search by noinduksiswa
-app.post('/siswa/promote', promoteSelectedSiswa); // Promote siswa grade
+app.post('/create-siswa', createSiswa);
+app.post('/login-siswa', loginSiswa);
+app.post('/login-orangtua', loginOrangTua);
+
+// Protected routes
+app.patch('/update-siswa/:noinduksiswa', isSiswa, editSiswaByNoInduk);
+app.patch('/promote-siswa', isAdmin, promoteSelectedSiswa);
+app.delete('/delete-siswa/:noinduksiswa', isAdmin, deleteSiswaByNoInduk);
+app.get('/filter-siswa', authenticateJWT, filterSiswa);
+app.get('/search-siswa/:noinduksiswa', authenticateJWT, searchByNoIndukSiswa);
+
 // Routes for Orangtua operations
 app.put('/siswa/:noinduksiswa/orangtua', editOrangtuaByNoInduk);
 app.delete('/siswa/:noinduksiswa/orangtua', deleteOrangtuaByNoInduk);
@@ -64,7 +72,15 @@ app.post('/generate-payment/:biayasekolahid', paymentHistoryController.uploadBuk
 
 
 // Basic route to test the connection
-app.get('/', (req, res) => {
+app.get('/just-parent', authenticateJWT, isParent, (req, res) => {
+  res.send('Hello World!');
+});
+
+app.get('/just-admin', authenticateJWT, isAdmin, (req, res) => {
+  res.send('Hello World!');
+});
+
+app.get('/just-siswa', authenticateJWT, isSiswa, (req, res) => {
   res.send('Hello World!');
 });
 
