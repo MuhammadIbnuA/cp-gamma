@@ -1,5 +1,4 @@
 const express = require('express');
-const { db, bucket } = require('./database.js'); // Import Firestore and storage bucket from firebase.js
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const app = express();
@@ -65,8 +64,8 @@ app.post('/generateSingleTagihan/:biayasekolahid', generateSingleTagihan);
 app.post('/generateMultipleTagihan', generateMultipleTagihan);
 // payment history
 app.post('/generate-payment/:biayasekolahid', paymentHistoryController.uploadBuktiFoto, paymentHistoryController.generatePaymentHistory);
-// app.patch('/approve-payment/:paymentid', paymentHistoryController.approvePayment);
-// app.patch('/reject-payment/:paymentid', paymentHistoryController.rejectPayment);
+app.patch('/approve-payment/:paymentid', paymentHistoryController.approvePayment);
+app.patch('/reject-payment/:paymentid', paymentHistoryController.rejectPayment);
 
 
 

@@ -82,3 +82,75 @@ exports.generatePaymentHistory = async (req, res) => {
         res.status(500).send('Error generating PaymentHistory document: ' + error.message);
     }
 };
+
+// Approve Payment
+exports.approvePayment = async (req, res) => {
+    try {
+      const paymentid = req.params.paymentid;
+  
+      // Ensure only admins can approve payments
+            (req, res, async () => { 
+        const paymentRef = db.collection('paymenthistory').doc(paymentid);
+        const paymentDoc = await paymentRef.get();
+  
+        if (!paymentDoc.exists) {
+          return res.status(404).send(`PaymentHistory document with id ${paymentid} not found`);
+        }
+  
+        const paymentData = paymentDoc.data();
+  
+        // Check if payment is already verified
+        if (paymentData.isVerified) {
+          return res.status(400).send('Payment has already been verified');
+        }
+  
+        // Update payment status and verification details
+        await paymentRef.update({
+          isVerified: true,
+          statusPembayaran: 'berhasil', // Payment successful
+          adminVerificator: req.user.noinduksiswa, // Assuming noinduksiswa is in the token for admin
+          updatedAt: FieldValue.serverTimestamp()
+        });
+  
+        res.status(200).send(`Payment with id ${paymentid} has been approved`);
+      });
+    } catch (error) {
+      res.status(500).send('Error approving payment: ' + error.message);
+    }
+  };
+  
+  // Reject Payment
+  exports.rejectPayment = async (req, res) => {
+    try {
+      const paymentid = req.params.paymentid;
+  
+      // Ensure only admins can reject payments
+        (req, res, async () => { 
+        const paymentRef = db.collection('paymenthistory').doc(paymentid);
+        const paymentDoc = await paymentRef.get();
+  
+        if (!paymentDoc.exists) {
+          return res.status(404).send(`PaymentHistory document with id ${paymentid} not found`);
+        }
+  
+        const paymentData = paymentDoc.data();
+  
+        // Check if payment is already verified
+        if (paymentData.isVerified) {
+          return res.status(400).send('Payment has already been verified');
+        }
+  
+        // Update payment status and verification details
+        await paymentRef.update({
+          isVerified: true,
+          statusPembayaran: 'gagal', // Payment failed
+          adminVerificator: req.user.noinduksiswa, // Assuming noinduksiswa is in the token for admin
+          updatedAt: FieldValue.serverTimestamp()
+        });
+  
+        res.status(200).send(`Payment with id ${paymentid} has been rejected`);
+      });
+    } catch (error) {
+      res.status(500).send('Error rejecting payment: ' + error.message);
+    }
+  };
