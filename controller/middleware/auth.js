@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const config = require("../../config");
+const { getTokenFromHeaders } = require("../../utils");
 const secretKey = config.jwt.secret; // Move this to your config file or environment variable
 
 // Middleware to authenticate and authorize based on roles
