@@ -11,7 +11,8 @@ const {
     searchByNoIndukSiswa,
     promoteSelectedSiswa,
     loginSiswa,
-    loginOrangTua
+    loginOrangTua,
+    decodeToken
   } = require('./controller/siswacontroller.js');
 const {
     addHistorySiswa,
@@ -28,7 +29,7 @@ const {
 const { editOrangtuaByNoInduk, deleteOrangtuaByNoInduk } = require('./controller/orangtuasiswacontroller.js');
 const { generateSingleTagihan, generateMultipleTagihan } = require('./controller/tagihanbayarcontroller.js');
 const paymentHistoryController = require('./controller/paymenthistory.js');
-const { isAdmin, isSiswa, isParent, authenticateJWT } = require('./controller/middleware/auth.js');
+const { isAdmin, isSiswa, isParent, authenticateToken } = require('./controller/middleware/auth.js');
 // Middleware to parse JSON bodies
 app.use(express.json());
 app.use(cookieParser());
@@ -43,8 +44,9 @@ app.post('/login-orangtua', loginOrangTua);
 app.patch('/update-siswa/:noinduksiswa', isSiswa, editSiswaByNoInduk);
 app.patch('/promote-siswa', isAdmin, promoteSelectedSiswa);
 app.delete('/delete-siswa/:noinduksiswa', isAdmin, deleteSiswaByNoInduk);
-app.get('/filter-siswa', authenticateJWT, filterSiswa);
-app.get('/search-siswa/:noinduksiswa', authenticateJWT, searchByNoIndukSiswa);
+app.get('/filter-siswa', authenticateToken, filterSiswa);
+app.get('/search-siswa/:noinduksiswa', authenticateToken, searchByNoIndukSiswa);
+app.get('/decodeToken', authenticateToken,decodeToken);
 
 // Routes for Orangtua operations
 app.put('/siswa/:noinduksiswa/orangtua', editOrangtuaByNoInduk);
@@ -71,15 +73,15 @@ app.patch('/reject-payment/:paymentid', paymentHistoryController.rejectPayment);
 
 
 // Basic route to test the connection
-app.get('/just-parent', authenticateJWT, isParent, (req, res) => {
+app.get('/just-parent', authenticateToken, isParent, (req, res) => {
   res.send('Hello World!');
 });
 
-app.get('/just-admin', authenticateJWT, isAdmin, (req, res) => {
+app.get('/just-admin', authenticateToken, isAdmin, (req, res) => {
   res.send('Hello World!');
 });
 
-app.get('/just-siswa', authenticateJWT, isSiswa, (req, res) => {
+app.get('/just-siswa', authenticateToken, isSiswa, (req, res) => {
   res.send('Hello World!');
 });
 

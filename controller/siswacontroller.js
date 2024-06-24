@@ -119,10 +119,19 @@ exports.createSiswa = async (req, res) => {
   }
 };
 
+// Helper function to generate JWT token
+const generateToken = (payload) => {
+  return jwt.sign(payload, secretKey, { expiresIn: '1h' });
+};
+
 // Login Siswa
 exports.loginSiswa = async (req, res) => {
   try {
     const { noinduksiswa, password } = req.body;
+
+    if (!noinduksiswa || !password) {
+      return res.status(400).send('Noinduksiswa and password are required');
+    }
 
     const doc = await db.collection('siswa').doc(noinduksiswa.toString()).get();
 
@@ -138,11 +147,18 @@ exports.loginSiswa = async (req, res) => {
       return res.status(401).send('Invalid password');
     }
 
-    const token = generateToken({ noinduksiswa: siswa.noinduksiswa, nama_siswa: siswa.nama_siswa, isAdmin: siswa.isAdmin, isSiswa: siswa.isSiswa, isParent: siswa.isParent });
-    res.cookie('token', token, { httpOnly: true });
+    const token = generateToken({
+      noinduksiswa: siswa.noinduksiswa,
+      nama_siswa: siswa.nama_siswa,
+      isAdmin: siswa.isAdmin,
+      isSiswa: siswa.isSiswa,
+      isParent: siswa.isParent
+    });
 
+    res.cookie('token', token, { httpOnly: true });
     res.status(200).json({ token });
   } catch (error) {
+    console.error('Error logging in:', error);
     res.status(500).send('Error logging in: ' + error.message);
   }
 };
@@ -156,14 +172,9 @@ exports.loginOrangTua = async (req, res) => {
       return res.status(400).send('Username and password are required');
     }
 
-    const noinduksiswa = username.split('ortu')[0]; // Extract noinduksiswa
+    const noinduksiswa = username.split('ortu')[0];
 
-    const docRef = db
-      .collection('siswa')
-      .doc(noinduksiswa)
-      .collection('orangtua')
-      .doc('details');
-
+    const docRef = db.collection('siswa').doc(noinduksiswa).collection('orangtua').doc('details');
     const doc = await docRef.get();
 
     if (!doc.exists) {
@@ -180,23 +191,18 @@ exports.loginOrangTua = async (req, res) => {
 
     const token = generateToken({
       noinduksiswa,
-      nama_siswa: orangtua.nama_siswa, // Assuming you have nama_siswa in orangtua
+      nama_siswa: orangtua.nama_siswa,
       isAdmin: orangtua.isAdmin,
       isParent: orangtua.isParent,
-      isSiswa: orangtua.isSiswa,
+      isSiswa: orangtua.isSiswa
     });
 
     res.cookie('token', token, { httpOnly: true });
     res.status(200).json({ token });
   } catch (error) {
     console.error('Error logging in:', error);
-    res.status(500).send('Error logging in'); 
+    res.status(500).send('Error logging in');
   }
-};
-
-
-const generateToken = (payload) => {
-  return jwt.sign(payload, secretKey, { expiresIn: '1h' });
 };
 
 // Promote selected Siswa to the next grade
@@ -319,6 +325,31 @@ exports.searchByNoIndukSiswa = async (req, res) => {
       res.status(200).json({ id: doc.id, ...doc.data() });
   } catch (error) {
       res.status (500).send('Error searching siswa: ' + error.message);
+  }
+};
+
+// decode payload
+exports.decodeToken = (req, res) => {
+  try {
+    // Get the token from the cookie
+    const token = req.cookies.token; 
+
+    if (!token) {
+      return res.status(401).send('No token found');
+    }
+
+    // Verify and decode the token
+    jwt.verify(token, 'iwishiwasyourjoke', (err, decoded) => {  // Replace 'your_secret_key'
+      if (err) {
+        return res.status(403).send('Invalid token');
+      }
+      
+      // Send the decoded payload as the response
+      res.status(200).json(decoded); 
+    });
+  } catch (error) {
+    console.error('Error decoding token:', error);
+    res.status(500).send('Error decoding token');
   }
 };
 
