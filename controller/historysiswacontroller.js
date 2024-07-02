@@ -1,5 +1,5 @@
-const { db } = require('../database');
-const { FieldValue } = require('firebase-admin').firestore;
+const { db } = require("../database");
+const { FieldValue } = require("firebase-admin").firestore;
 
 // Add a history siswa record
 // Add a history siswa record
@@ -9,13 +9,15 @@ exports.addHistorySiswa = async (req, res) => {
       noinduksiswa,
       rataNilaiUTS = 0,
       rataNilaiUAS = 0,
-      keterangan = 'data terbuat'
+      keterangan = "data terbuat",
     } = req.body;
 
     // Fetch siswa data
-    const siswaDoc = await db.collection('siswa').doc(noinduksiswa).get();
+    const siswaDoc = await db.collection("siswa").doc(noinduksiswa).get();
     if (!siswaDoc.exists) {
-      return res.status(404).send(`Siswa with noinduksiswa ${noinduksiswa} not found`);
+      return res
+        .status(404)
+        .send(`Siswa with noinduksiswa ${noinduksiswa} not found`);
     }
     const siswaData = siswaDoc.data();
     const { tahunAjaranSekarang, kelas } = siswaData;
@@ -34,17 +36,20 @@ exports.addHistorySiswa = async (req, res) => {
       keterangan,
       ispromoted: calculateIsPromoted(rataNilaiUTS, rataNilaiUAS),
       createdAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp()
+      updatedAt: FieldValue.serverTimestamp(),
     };
 
     // Add history siswa record to Firestore
-    await db.collection('historysiswa').doc(historysiswaid).set(historySiswaData);
+    await db
+      .collection("historysiswa")
+      .doc(historysiswaid)
+      .set(historySiswaData);
 
     // Generate biayaSekolah records for the year
     const currentMonth = new Date().getMonth(); // Get current month index
     const batch = db.batch();
     for (let i = 0; i < 12; i++) {
-      const monthIndex = (currentMonth + i) % 12 + 1; // Cycle through months, starting from current month
+      const monthIndex = ((currentMonth + i) % 12) + 1; // Cycle through months, starting from current month
       const biayaSekolahId = `tagihan${noinduksiswa}-${tahunAjaranSekarang}-${monthIndex}`;
       const biayaSekolahData = {
         biayaSekolahId,
@@ -62,20 +67,24 @@ exports.addHistorySiswa = async (req, res) => {
         totalBiaya: 0, // Default totalBiaya value
         isPaid: false,
         createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp()
+        updatedAt: FieldValue.serverTimestamp(),
       };
-      const biayaSekolahRef = db.collection('historysiswa').doc(historysiswaid).collection('biayasekolah').doc(biayaSekolahId);
+      const biayaSekolahRef = db
+        .collection("historysiswa")
+        .doc(historysiswaid)
+        .collection("biayasekolah")
+        .doc(biayaSekolahId);
       batch.set(biayaSekolahRef, biayaSekolahData);
     }
     await batch.commit();
 
-    res.status(200).send(`HistorySiswa record added with id: ${historysiswaid}`);
+    res
+      .status(200)
+      .send(`HistorySiswa record added with id: ${historysiswaid}`);
   } catch (error) {
-    res.status(500).send('Error adding HistorySiswa record: ' + error.message);
+    res.status(500).send("Error adding HistorySiswa record: " + error.message);
   }
 };
-
-
 
 // Function to calculate ispromoted
 function calculateIsPromoted(rataNilaiUTS, rataNilaiUAS) {
@@ -83,25 +92,32 @@ function calculateIsPromoted(rataNilaiUTS, rataNilaiUAS) {
   return rataRataTotal >= 65;
 }
 
-
 // Update a history siswa record
 exports.updateHistorySiswa = async (req, res) => {
   try {
     const { historysiswaid } = req.params;
     const { keterangan } = req.body;
 
-    const historySiswaRef = db.collection('historysiswa').doc(historysiswaid);
+    const historySiswaRef = db.collection("historysiswa").doc(historysiswaid);
     const historySiswaDoc = await historySiswaRef.get();
 
     if (!historySiswaDoc.exists) {
-      return res.status(404).send(`HistorySiswa record with id ${historysiswaid} not found`);
+      return res
+        .status(404)
+        .send(`HistorySiswa record with id ${historysiswaid} not found`);
     }
 
     await historySiswaRef.update({ keterangan });
 
-    res.status(200).send(`HistorySiswa record with id ${historysiswaid} updated successfully`);
+    res
+      .status(200)
+      .send(
+        `HistorySiswa record with id ${historysiswaid} updated successfully`
+      );
   } catch (error) {
-    res.status(500).send('Error updating HistorySiswa record: ' + error.message);
+    res
+      .status(500)
+      .send("Error updating HistorySiswa record: " + error.message);
   }
 };
 
@@ -110,33 +126,44 @@ exports.getSiswaPromotedOnKelas = async (req, res) => {
   try {
     const { kelas } = req.params;
 
-    const snapshot = await db.collection('historysiswa')
-      .where('kelas', '==', parseInt(kelas))
-      .where('ispromoted', '==', true)
+    const snapshot = await db
+      .collection("historysiswa")
+      .where("kelas", "==", parseInt(kelas))
+      .where("ispromoted", "==", true)
       .get();
 
-    const siswaPromoted = snapshot.docs.map(doc => doc.data().noinduksiswa);
+    const siswaPromoted = snapshot.docs.map((doc) => doc.data().noinduksiswa);
 
     res.status(200).send(siswaPromoted);
   } catch (error) {
-    res.status(500).send('Error getting siswa promoted on kelas: ' + error.message);
+    res
+      .status(500)
+      .send("Error getting siswa promoted on kelas: " + error.message);
   }
 };
 
 // Get all history siswa records by noinduksiswa
 exports.getAllHistorySiswaByNoIndukSiswa = async (req, res) => {
-    try {
-      const { noinduksiswa } = req.params;
-  
-      const snapshot = await db.collection('historysiswa')
-        .where('noinduksiswa', '==', noinduksiswa)
-        .get();
-  
-      const historySiswaList = snapshot.docs.map(doc => doc.data());
-  
-      res.status(200).send(historySiswaList);
-    } catch (error) {
-      res.status(500).send('Error getting all history siswa records: ' + error.message);
-    }
-  };
-  
+  try {
+    const { noinduksiswa } = req.params;
+
+    // const snapshot = await db.collection('historysiswa')
+    //   .where('noinduksiswa', '==', noinduksiswa)
+    //   .get();
+
+    // const historySiswaList = snapshot.docs.map(doc => doc.data());
+
+    const snapshot = await db
+      .collection("historysiswa")
+      .doc("1007-2024-2025")
+      .collection("biayasekolah")
+      .get();
+    const historySiswaList = snapshot.docs.map((doc) => doc.data());
+
+    res.status(200).send(historySiswaList);
+  } catch (error) {
+    res
+      .status(500)
+      .send("Error getting all history siswa records: " + error.message);
+  }
+};
