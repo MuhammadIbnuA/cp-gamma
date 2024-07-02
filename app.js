@@ -46,7 +46,11 @@ const {
 // Middleware to parse JSON bodies
 app.use(express.json());
 app.use(cookieParser());
-app.use(cors());
+app.use(
+  cors({
+    origin: "*",
+  })
+);
 
 app.post("/create-siswa", createSiswa);
 app.post("/login-siswa", loginSiswa);
