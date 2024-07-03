@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
+const dayjs = require("dayjs");
 const app = express();
 const port = 3002;
 const {
@@ -13,6 +14,8 @@ const {
   loginSiswa,
   loginOrangTua,
   decodeToken,
+  loginAdmin,
+  deleteSiswa,
 } = require("./controller/siswacontroller.js");
 const {
   addHistorySiswa,
@@ -43,6 +46,8 @@ const {
   isParent,
   authenticateToken,
 } = require("./controller/middleware/auth.js");
+const { gender } = require("./controller/statisticcontroller.js");
+const { db } = require("./database.js");
 // Middleware to parse JSON bodies
 app.use(express.json());
 app.use(cookieParser());
@@ -55,9 +60,11 @@ app.use(
 app.post("/create-siswa", createSiswa);
 app.post("/login-siswa", loginSiswa);
 app.post("/login-orangtua", loginOrangTua);
+app.post("/login-admin", loginAdmin);
 
 // Protected routes
-app.patch("/update-siswa/:noinduksiswa", isSiswa, editSiswaByNoInduk);
+app.put("/update-siswa/:noinduksiswa", editSiswaByNoInduk);
+app.delete("/siswa/:noinduksiswa", deleteSiswaByNoInduk);
 app.patch("/promote-siswa", isAdmin, promoteSelectedSiswa);
 app.delete("/delete-siswa/:noinduksiswa", isAdmin, deleteSiswaByNoInduk);
 app.get("/filter-siswa", authenticateToken, filterSiswa);
@@ -118,6 +125,97 @@ app.get("/just-admin", authenticateToken, isAdmin, (req, res) => {
 
 app.get("/just-siswa", authenticateToken, isSiswa, (req, res) => {
   res.send("Hello World!");
+});
+
+app.get("/statistic/gender", gender);
+app.get("/current-and-next-month-payments/:nis", async (req, res) => {
+  try {
+    const nis = req.params.nis;
+    const currentDate = dayjs();
+    const currentMonth = currentDate.month() + 1; // month() is 0-indexed
+    const nextMonth = currentDate.add(1, "month").month() + 1;
+    const currentYear = currentDate.year();
+
+    // Calculate document IDs for the current and next month
+    const basePath = `/historysiswa/${nis}-2024-2025/biayasekolah/`;
+    const currentMonthDoc = `${basePath}tagihan${nis}-2024-2025-${currentMonth}`;
+
+    const nextMonthDoc = `${basePath}tagihan${nis}-2024-2025-${nextMonth}`;
+
+    const currentMonthSnapshot = await db.doc(currentMonthDoc).get();
+    const nextMonthSnapshot = await db.doc(nextMonthDoc).get();
+
+    // Calculate total biaya for current month
+    const currentMonthData = currentMonthSnapshot.exists
+      ? currentMonthSnapshot.data()
+      : null;
+    const nextMonthData = nextMonthSnapshot.exists
+      ? nextMonthSnapshot.data()
+      : null;
+
+    const calculateTotalBiaya = (data) => {
+      if (!data) return 0;
+      return new Intl.NumberFormat("id-ID", {
+        style: "currency",
+        currency: "IDR",
+      }).format(
+        parseInt(data.biayaKegiatanLain) +
+          parseInt(data.biayaBuku) +
+          parseInt(data.biayaSaranaSekolah) +
+          parseInt(data.biayaEkskul) +
+          parseInt(data.biayaSeragam) +
+          parseInt(data.biayaSPP) +
+          parseInt(data.biayaStudyTour)
+      );
+    };
+
+    const currentMonthTotal = calculateTotalBiaya(currentMonthData);
+    const nextMonthTotal = calculateTotalBiaya(nextMonthData);
+
+    // Add month name and year to the data
+    const addMonthYear = (data, month, year) => {
+      if (!data) return null;
+      return {
+        ...data,
+        monthName: dayjs()
+          .month(month - 1)
+          .format("MMMM"),
+        year,
+      };
+    };
+
+    const currentMonthResult = addMonthYear(
+      currentMonthData,
+      currentMonth,
+      currentYear
+    );
+    const nextMonthResult = addMonthYear(nextMonthData, nextMonth, currentYear);
+
+    // Fetch all next month's data to the end of the year
+    const nextMonthDocs = [];
+    for (let i = nextMonth; i <= 12; i++) {
+      const docId = `${basePath}tagihan1000-2024-2025-${i}`;
+      const docSnapshot = await db.doc(docId).get();
+      if (docSnapshot.exists) {
+        nextMonthDocs.push(addMonthYear(docSnapshot.data(), i, currentYear));
+      }
+    }
+
+    res.json({
+      currentMonth: {
+        data: currentMonthResult,
+        totalBiaya: currentMonthTotal,
+      },
+      nextMonth: {
+        data: nextMonthResult,
+        totalBiaya: nextMonthTotal,
+        remainingMonths: nextMonthDocs,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching monthly payments:", error);
+    res.status(500).send("Internal Server Error");
+  }
 });
 
 // Start the Express server

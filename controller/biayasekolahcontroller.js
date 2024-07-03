@@ -1,6 +1,5 @@
 const { db } = require("../database");
 const { FieldValue } = require("firebase-admin").firestore;
-const {} = require("firebase-admin").firestore;
 
 // Update biayasekolah document
 exports.updateBiayaSekolah = async (req, res) => {
@@ -111,9 +110,17 @@ exports.getHistorySiswaWithBiayaSekolahById = async (req, res) => {
   try {
     const { biayaSekolahId } = req.params;
     const historysiswaRef = await db.collection("historysiswa").get();
-    let historysiswa = {};
+    console.log(
+      "🚀 ~ exports.getHistorySiswaWithBiayaSekolahById= ~ historysiswaRef:",
+      historysiswaRef.docs
+    );
+    let historysiswa = [];
     for (const doc of historysiswaRef.docs) {
       const data = doc.data();
+      console.log(
+        "🚀 ~ exports.getHistorySiswaWithBiayaSekolahById= ~ data:",
+        data
+      );
       data.id = doc.id;
       const biayasekolahRef = await db
         .collection("historysiswa")
@@ -121,9 +128,16 @@ exports.getHistorySiswaWithBiayaSekolahById = async (req, res) => {
         .collection("biayasekolah")
         .doc(biayaSekolahId)
         .get();
-      historysiswa = biayasekolahRef.data();
+
+      if (biayasekolahRef.data()) {
+        historysiswa.push(biayasekolahRef.data());
+      }
+      console.log(
+        "🚀 ~ exports.getHistorySiswaWithBiayaSekolahById= ~ historysiswa:",
+        historysiswa
+      );
     }
-    res.status(200).json(historysiswa);
+    res.status(200).json(historysiswa[0]);
   } catch (error) {
     res
       .status(500)
@@ -143,8 +157,10 @@ exports.getBiayaSekolahByHistorySiswaId = async (req, res) => {
       .collection("historysiswa")
       .doc(historysiswaid)
       .collection("biayasekolah")
+      .orderBy("sortNumber", "asc")
       .get();
 
+    console.log(biayaSekolahSnapshot);
     if (biayaSekolahSnapshot.empty) {
       return res
         .status(404)
@@ -172,7 +188,6 @@ exports.getAllHistories = async (req, res) => {
   try {
     const historysiswaRef = db.collection("historysiswa");
     const historysiswaSnapshot = await historysiswaRef.get();
-
     const historysiswa = [];
 
     for (const doc of historysiswaSnapshot.docs) {
@@ -180,7 +195,11 @@ exports.getAllHistories = async (req, res) => {
       data.id = doc.id;
 
       // Fetch biayasekolah subcollection
-      const biayasekolahRef = historysiswaRef
+      const siswa = db.collection("siswa").doc(data.noinduksiswa);
+      const siswaSnapshot = await siswa.get();
+
+      // Fetch biayasekolah subcollection
+      const biayasekolahRef = await historysiswaRef
         .doc(doc.id)
         .collection("biayasekolah");
       const biayasekolahSnapshot = await biayasekolahRef.get();
@@ -189,6 +208,11 @@ exports.getAllHistories = async (req, res) => {
         id: subDoc.id,
         ...subDoc.data(),
       }));
+
+      data.siswa = {
+        id: siswaSnapshot.id,
+        ...siswaSnapshot.data(),
+      };
 
       historysiswa.push(data);
     }

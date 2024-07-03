@@ -60,6 +60,7 @@ exports.createSiswa = async (req, res) => {
       penghasilanibu,
       namawali,
       noteleponwali,
+      jeniskelamin,
       emailOrtu,
     } = req.body;
 
@@ -70,6 +71,7 @@ exports.createSiswa = async (req, res) => {
       !tanggal_lahir ||
       !agama ||
       !alamat ||
+      !jeniskelamin ||
       !kelurahan ||
       !kecamatan ||
       !kota ||
@@ -103,6 +105,7 @@ exports.createSiswa = async (req, res) => {
       alamat,
       kelurahan,
       kecamatan,
+      jeniskelamin,
       kota,
       kodepos,
       notelepon,
@@ -188,6 +191,34 @@ exports.loginSiswa = async (req, res) => {
 
     res.cookie("token", token, { httpOnly: true });
     res.status(200).json({ token });
+  } catch (error) {
+    console.error("Error logging in:", error);
+    res.status(500).send("Error logging in: " + error.message);
+  }
+};
+
+exports.loginAdmin = async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    if (!password) {
+      return res.status(400).send("Password is required");
+    }
+
+    if (username !== "admin" || password !== "admin") {
+      return res.status(401).send("Invalid username or password");
+    }
+
+    const data = {
+      username: "Admin",
+      role: "admin",
+      scope: "full",
+    };
+
+    const token = generateToken(data);
+
+    res.cookie("token", token, { httpOnly: true });
+    return res.status(200).json({ token, data });
   } catch (error) {
     console.error("Error logging in:", error);
     res.status(500).send("Error logging in: " + error.message);
@@ -303,6 +334,29 @@ exports.editSiswaByNoInduk = async (req, res) => {
     res
       .status(200)
       .send(`Siswa with noinduksiswa: ${noinduksiswa} updated successfully`);
+  } catch (error) {
+    res.status(500).send("Error updating siswa: " + error.message);
+  }
+};
+
+exports.deleteSiswa = async (req, res) => {
+  try {
+    const nis = parseInt(req.params.nis, 10);
+
+    if (isNaN(nis)) {
+      return res.status(400).send("Invalid noinduksiswa");
+    }
+
+    const doc = await db.collection("siswa").doc(noinduksiswa.toString()).get();
+
+    if (!doc.exists) {
+      return res.status(404).send("No siswa found with the given noinduksiswa");
+    }
+
+    await db.collection("siswa").doc(noinduksiswa.toString()).delete();
+    res
+      .status(200)
+      .send(`Siswa with noinduksiswa: ${noinduksiswa} delete successfully`);
   } catch (error) {
     res.status(500).send("Error updating siswa: " + error.message);
   }

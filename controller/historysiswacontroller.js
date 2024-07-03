@@ -52,6 +52,7 @@ exports.addHistorySiswa = async (req, res) => {
       const monthIndex = ((currentMonth + i) % 12) + 1; // Cycle through months, starting from current month
       const biayaSekolahId = `tagihan${noinduksiswa}-${tahunAjaranSekarang}-${monthIndex}`;
       const biayaSekolahData = {
+        sortNumber: monthIndex,
         biayaSekolahId,
         historysiswaid,
         noinduksiswa,
@@ -147,17 +148,11 @@ exports.getAllHistorySiswaByNoIndukSiswa = async (req, res) => {
   try {
     const { noinduksiswa } = req.params;
 
-    // const snapshot = await db.collection('historysiswa')
-    //   .where('noinduksiswa', '==', noinduksiswa)
-    //   .get();
-
-    // const historySiswaList = snapshot.docs.map(doc => doc.data());
-
     const snapshot = await db
       .collection("historysiswa")
-      .doc("1007-2024-2025")
-      .collection("biayasekolah")
+      .where("noinduksiswa", "==", noinduksiswa)
       .get();
+
     const historySiswaList = snapshot.docs.map((doc) => doc.data());
 
     res.status(200).send(historySiswaList);
